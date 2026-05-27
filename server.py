@@ -95,36 +95,24 @@ async def unsplash_trigger_download(params: TriggerDownloadInput) -> str:
 
 if __name__ == "__main__":
     transport = os.environ.get("MCP_TRANSPORT", "stdio")
-    print(f"[startup] transport={transport} python={sys.version}", flush=True)
-
     if transport == "http":
-        try:
-            import uvicorn
-            from starlette.applications import Starlette
-            from starlette.routing import Route, Mount
-            from starlette.responses import JSONResponse
-            print("[startup] uvicorn+starlette imported OK", flush=True)
-        except ImportError as e:
-            print(f"[startup] IMPORT ERROR: {e}", flush=True)
-            sys.exit(1)
+        import uvicorn
 
-        async def health(request):
-            return JSONResponse({"status": "ok", "service": "unsplash-mcp"})
+        # Get MCP ASGI app
+        mcp_asgi = mcp.streamable_http_app()
 
-        try:
-            mcp_app = mcp.streamable_http_app()
-            print("[startup] mcp_app created OK", flush=True)
-        except Exception as e:
-            print(f"[startup] MCP APP ERROR: {type(e).__name__}: {e}", flush=True)
-            sys.exit(1)
+        # Wrap with health check middleware — no Starlette mount issues
+        async def app(scope, receive, send):
+            if scope["type"] == "http" and scope.get("path") in ("/", "/health"):
+                body = b'{"status":"ok","service":"unsplash-mcp"}'
+                await send({"type": "http.response.start", "status": 200,
+                            "headers": [(b"content-type", b"application/json"),
+                                        (b"content-length", str(len(body)).encode())]})
+                await send({"type": "http.response.body", "body": body})
+            else:
+                await mcp_asgi(scope, receive, send)
 
-        app = Starlette(routes=[
-            Route("/", health),
-            Route("/health", health),
-            Mount("/mcp", app=mcp_app),
-        ])
         port = int(os.environ.get("PORT", 10000))
-        print(f"[startup] starting uvicorn on 0.0.0.0:{port}", flush=True)
         uvicorn.run(app, host="0.0.0.0", port=port)
     else:
         mcp.run()
