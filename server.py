@@ -88,11 +88,8 @@ async def unsplash_search_photos(params: SearchPhotosInput) -> str:
     e.g. 'sailing Mediterranean lifestyle Mallorca', 'luxury villa Mallorca sea view',
     'snorkeling turquoise water Balearic Islands', 'paddleboard Mediterranean sea lifestyle'.
 
-    Prefer photos with:
-    - Clean areas suitable for text overlay (sky, water, sand, blurred backgrounds)
-    - Dominant colors: navy blue (#0c2040), sky blue (#a6d9f3), sand (#f5e6c8), turquoise (#4fa8b8)
-    - Luxury lifestyle, minimalist, aspirational composition
-    - Avoid: busy patterns, tropical greens, cold greys, crowded scenes
+    Prefer photos with clean areas for text overlay and Aura brand colors:
+    navy blue, sky blue, sand/gold, turquoise. Avoid busy, tropical or cold-grey photos.
     """
     try:
         p = {"query": params.query, "per_page": params.per_page, "order_by": params.order_by}
@@ -145,7 +142,21 @@ async def unsplash_trigger_download(params: TriggerDownloadInput) -> str:
 if __name__ == "__main__":
     transport = os.environ.get("MCP_TRANSPORT", "stdio")
     if transport == "http":
+        import uvicorn
+        from starlette.applications import Starlette
+        from starlette.routing import Route, Mount
+        from starlette.responses import JSONResponse
+
+        async def health(request):
+            return JSONResponse({"status": "ok", "service": "unsplash-mcp"})
+
+        mcp_app = mcp.streamable_http_app()
+        app = Starlette(routes=[
+            Route("/", health),
+            Route("/health", health),
+            Mount("/mcp", app=mcp_app),
+        ])
         port = int(os.environ.get("PORT", 10000))
-        mcp.run(transport="sse", host="0.0.0.0", port=port)
+        uvicorn.run(app, host="0.0.0.0", port=port)
     else:
         mcp.run()
