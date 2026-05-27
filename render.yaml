@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: unsplash-mcp-aura
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python server.py
+    envVars:
+      - key: MCP_TRANSPORT
+        value: http
+      - key: UNSPLASH_ACCESS_KEY
+        value: AOj02YTyj0fhcsbNZw7hbsCg-mTRq7KrOUaSjAOfBl8
+      - key: PORT
+        generateValue: true
