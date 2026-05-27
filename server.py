@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """Unsplash MCP Server — Baleares Edition"""
 
-import os
-import json
-import httpx
+import os, sys, json, httpx
 from typing import Optional
 from pydantic import BaseModel, Field, ConfigDict
 from mcp.server.fastmcp import FastMCP
@@ -16,7 +14,6 @@ BASE_URL = "https://api.unsplash.com"
 def _headers():
     return {"Authorization": f"Client-ID {UNSPLASH_ACCESS_KEY}"}
 
-
 def _format_photo(p):
     return {
         "id": p["id"],
@@ -28,7 +25,6 @@ def _format_photo(p):
         "photographer": {"name": p["user"]["name"], "username": p["user"]["username"], "profile": p["user"]["links"]["html"]},
         "likes": p.get("likes", 0),
     }
-
 
 def _handle_error(e):
     if isinstance(e, httpx.HTTPStatusError):
@@ -47,11 +43,9 @@ class SearchPhotosInput(BaseModel):
     order_by: Optional[str] = Field(default="relevant")
     orientation: Optional[str] = Field(default=None)
 
-
 class PopularPhotosInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     per_page: Optional[int] = Field(default=5, ge=1, le=10)
-
 
 class TriggerDownloadInput(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
@@ -76,7 +70,6 @@ async def unsplash_search_photos(params: SearchPhotosInput) -> str:
     except Exception as e:
         return _handle_error(e)
 
-
 @mcp.tool(name="unsplash_get_popular_photos")
 async def unsplash_get_popular_photos(params: PopularPhotosInput) -> str:
     """Get trending photos on Unsplash."""
@@ -87,7 +80,6 @@ async def unsplash_get_popular_photos(params: PopularPhotosInput) -> str:
         return json.dumps({"photos": [_format_photo(p) for p in resp.json()]}, indent=2)
     except Exception as e:
         return _handle_error(e)
-
 
 @mcp.tool(name="unsplash_trigger_download")
 async def unsplash_trigger_download(params: TriggerDownloadInput) -> str:
@@ -103,22 +95,36 @@ async def unsplash_trigger_download(params: TriggerDownloadInput) -> str:
 
 if __name__ == "__main__":
     transport = os.environ.get("MCP_TRANSPORT", "stdio")
+    print(f"[startup] transport={transport} python={sys.version}", flush=True)
+
     if transport == "http":
-        import uvicorn
-        from starlette.applications import Starlette
-        from starlette.routing import Route, Mount
-        from starlette.responses import JSONResponse
+        try:
+            import uvicorn
+            from starlette.applications import Starlette
+            from starlette.routing import Route, Mount
+            from starlette.responses import JSONResponse
+            print("[startup] uvicorn+starlette imported OK", flush=True)
+        except ImportError as e:
+            print(f"[startup] IMPORT ERROR: {e}", flush=True)
+            sys.exit(1)
 
         async def health(request):
             return JSONResponse({"status": "ok", "service": "unsplash-mcp"})
 
-        mcp_app = mcp.streamable_http_app()
+        try:
+            mcp_app = mcp.streamable_http_app()
+            print("[startup] mcp_app created OK", flush=True)
+        except Exception as e:
+            print(f"[startup] MCP APP ERROR: {type(e).__name__}: {e}", flush=True)
+            sys.exit(1)
+
         app = Starlette(routes=[
             Route("/", health),
             Route("/health", health),
             Mount("/mcp", app=mcp_app),
         ])
         port = int(os.environ.get("PORT", 10000))
+        print(f"[startup] starting uvicorn on 0.0.0.0:{port}", flush=True)
         uvicorn.run(app, host="0.0.0.0", port=port)
     else:
         mcp.run()
