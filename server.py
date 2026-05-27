@@ -145,7 +145,7 @@ async def unsplash_trigger_download(params: TriggerDownloadInput) -> str:
 if __name__ == "__main__":
     transport = os.environ.get("MCP_TRANSPORT", "stdio")
     if transport == "http":
-        port = int(os.environ.get("PORT", 8000))
-        mcp.run(transport="streamable-http", host="0.0.0.0", port=port, path="/mcp")
+        port = int(os.environ.get("PORT", 10000))
+        mcp.run(transport="sse", host="0.0.0.0", port=port)
     else:
         mcp.run()
