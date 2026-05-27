@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
 """Unsplash MCP Server — Baleares Edition"""
 
-import os, sys, json, httpx
+import os, json, httpx
 from typing import Optional
 from pydantic import BaseModel, Field, ConfigDict
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
-mcp = FastMCP("unsplash_mcp")
+# Disable DNS rebinding protection — Render provides its own security layer
+mcp = FastMCP(
+    "unsplash_mcp",
+    transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
+)
+
 UNSPLASH_ACCESS_KEY = os.environ.get("UNSPLASH_ACCESS_KEY", "")
 BASE_URL = "https://api.unsplash.com"
 
@@ -101,7 +107,6 @@ if __name__ == "__main__":
         mcp_asgi = mcp.streamable_http_app()
 
         async def app(scope, receive, send):
-            # Health check
             if scope["type"] == "http" and scope.get("path") in ("/", "/health"):
                 body = b'{"status":"ok","service":"unsplash-mcp"}'
                 await send({"type": "http.response.start", "status": 200,
@@ -109,13 +114,6 @@ if __name__ == "__main__":
                                         (b"content-length", str(len(body)).encode())]})
                 await send({"type": "http.response.body", "body": body})
                 return
-
-            # Rewrite host header to bypass TrustedHostMiddleware in MCP
-            if scope["type"] in ("http", "websocket"):
-                headers = [(k, v) for k, v in scope.get("headers", []) if k.lower() != b"host"]
-                headers.append((b"host", b"localhost"))
-                scope = {**scope, "headers": headers}
-
             await mcp_asgi(scope, receive, send)
 
         port = int(os.environ.get("PORT", 10000))
