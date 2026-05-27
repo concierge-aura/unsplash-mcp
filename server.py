@@ -98,19 +98,25 @@ if __name__ == "__main__":
     if transport == "http":
         import uvicorn
 
-        # Get MCP ASGI app
         mcp_asgi = mcp.streamable_http_app()
 
-        # Wrap with health check middleware — no Starlette mount issues
         async def app(scope, receive, send):
+            # Health check
             if scope["type"] == "http" and scope.get("path") in ("/", "/health"):
                 body = b'{"status":"ok","service":"unsplash-mcp"}'
                 await send({"type": "http.response.start", "status": 200,
                             "headers": [(b"content-type", b"application/json"),
                                         (b"content-length", str(len(body)).encode())]})
                 await send({"type": "http.response.body", "body": body})
-            else:
-                await mcp_asgi(scope, receive, send)
+                return
+
+            # Rewrite host header to bypass TrustedHostMiddleware in MCP
+            if scope["type"] in ("http", "websocket"):
+                headers = [(k, v) for k, v in scope.get("headers", []) if k.lower() != b"host"]
+                headers.append((b"host", b"localhost"))
+                scope = {**scope, "headers": headers}
+
+            await mcp_asgi(scope, receive, send)
 
         port = int(os.environ.get("PORT", 10000))
         uvicorn.run(app, host="0.0.0.0", port=port)
